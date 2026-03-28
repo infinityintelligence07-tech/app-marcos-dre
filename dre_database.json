@@ -1,0 +1,440 @@
+{
+    "empresas": {
+        "emp_principal_1": {
+            "nome": "IAM",
+            "cnpj": "",
+            "obs": "Migra\u00e7\u00e3o Autom\u00e1tica",
+            "dados": {
+                "plano_contas": [
+                    {
+                        "nome_conta": "VENDAS",
+                        "categoria_dre": "receita"
+                    },
+                    {
+                        "nome_conta": "IMPOSTO",
+                        "categoria_dre": "deducao"
+                    },
+                    {
+                        "nome_conta": "PASSAGENS AEREAS",
+                        "categoria_dre": "custo_variavel"
+                    },
+                    {
+                        "nome_conta": "FOLHA ADM",
+                        "categoria_dre": "despesa_operacional"
+                    },
+                    {
+                        "nome_conta": "Outras receitas",
+                        "categoria_dre": "outras_receitas"
+                    },
+                    {
+                        "nome_conta": "Parcela de carro",
+                        "categoria_dre": "investimento"
+                    },
+                    {
+                        "nome_conta": "Capital de Giro STONE",
+                        "categoria_dre": "emprestimo"
+                    },
+                    {
+                        "nome_conta": "NLG",
+                        "categoria_dre": "distribuicao_lucro"
+                    }
+                ],
+                "orcamentos": [
+                    {
+                        "id": "8617e5b0-011a-487d-b083-fc9902299730",
+                        "data_lancamento": "2026-03-26",
+                        "data_ref": "2026-04-01",
+                        "conta": "IMPOSTO",
+                        "faturado": 0.0,
+                        "p1": 500.0,
+                        "descricao": "",
+                        "efetivado": true
+                    },
+                    {
+                        "id": "0ae95d74-0155-4821-a9a4-aa489d7e0b3f",
+                        "data_lancamento": "2026-03-26",
+                        "data_ref": "2026-04-01",
+                        "conta": "PASSAGENS AEREAS",
+                        "faturado": 0.0,
+                        "p1": 500.0,
+                        "descricao": "",
+                        "efetivado": true
+                    },
+                    {
+                        "id": "37c45777-0372-4f34-a181-ddff22ee1d3c",
+                        "data_lancamento": "2026-03-26",
+                        "data_ref": "2026-04-01",
+                        "conta": "FOLHA ADM",
+                        "faturado": 0.0,
+                        "p1": 1000.0,
+                        "descricao": "",
+                        "efetivado": true
+                    },
+                    {
+                        "id": "9eac7617-fe6e-49c6-a3d2-97f76663da38",
+                        "data_lancamento": "2026-03-26",
+                        "data_ref": "2026-04-01",
+                        "conta": "Parcela de carro",
+                        "faturado": 0.0,
+                        "p1": 250.0,
+                        "descricao": "",
+                        "efetivado": true
+                    },
+                    {
+                        "id": "84efd111-8a5f-40ce-87ad-3751d553b120",
+                        "data_lancamento": "2026-03-26",
+                        "data_ref": "2026-04-01",
+                        "conta": "Capital de Giro STONE",
+                        "faturado": 0.0,
+                        "p1": 100.0,
+                        "descricao": "",
+                        "efetivado": true
+                    },
+                    {
+                        "id": "ad785810-1871-4250-aa2f-2a8fb260f00d",
+                        "data_lancamento": "2026-03-26",
+                        "data_ref": "2026-04-01",
+                        "conta": "NLG",
+                        "faturado": 0.0,
+                        "p1": 100.0,
+                        "descricao": "",
+                        "efetivado": true
+                    },
+                    {
+                        "id": "e94c375d-ba67-472d-a43f-e386c92c441a",
+                        "data_lancamento": "2026-03-26",
+                        "data_ref": "2026-04-01",
+                        "conta": "VENDAS",
+                        "faturado": 5000.0,
+                        "p1": 5000.0,
+                        "descricao": "",
+                        "efetivado": false
+                    }
+                ],
+                "lancamentos_reais": [
+                    {
+                        "transacao_id": "24aadce7-9825-46dd-afe2-14c15f1d5385",
+                        "ativo": false,
+                        "data_real": "2026-03-26",
+                        "conta": "IMPOSTO",
+                        "faturado": 0.0,
+                        "valor": 450.0,
+                        "descricao": " (Baixa Lote)",
+                        "orcamento_id": "8617e5b0-011a-487d-b083-fc9902299730",
+                        "forma_pagamento": "Lote",
+                        "nao_previsto": false
+                    },
+                    {
+                        "transacao_id": "0ae93fd2-4999-4dad-bf36-eec79b1a6724",
+                        "ativo": false,
+                        "data_real": "2026-03-26",
+                        "conta": "PASSAGENS AEREAS",
+                        "faturado": 0.0,
+                        "valor": 600.0,
+                        "descricao": " (Baixa Lote)",
+                        "orcamento_id": "0ae95d74-0155-4821-a9a4-aa489d7e0b3f",
+                        "forma_pagamento": "Lote",
+                        "nao_previsto": false
+                    },
+                    {
+                        "transacao_id": "a4adce10-f8eb-48ec-8bfa-4d4aa6d6459e",
+                        "ativo": false,
+                        "data_real": "2026-03-26",
+                        "conta": "FOLHA ADM",
+                        "faturado": 0.0,
+                        "valor": 1500.0,
+                        "descricao": " (Baixa Lote)",
+                        "orcamento_id": "37c45777-0372-4f34-a181-ddff22ee1d3c",
+                        "forma_pagamento": "Lote",
+                        "nao_previsto": false
+                    },
+                    {
+                        "transacao_id": "141520fc-4c00-43a6-8e37-0dcbeb43ae29",
+                        "ativo": false,
+                        "data_real": "2026-03-26",
+                        "conta": "Parcela de carro",
+                        "faturado": 0.0,
+                        "valor": 250.0,
+                        "descricao": " (Baixa Lote)",
+                        "orcamento_id": "9eac7617-fe6e-49c6-a3d2-97f76663da38",
+                        "forma_pagamento": "Lote",
+                        "nao_previsto": false
+                    },
+                    {
+                        "transacao_id": "0824469c-69c1-452d-8743-18e03ef9d6e0",
+                        "ativo": false,
+                        "data_real": "2026-03-26",
+                        "conta": "Capital de Giro STONE",
+                        "faturado": 0.0,
+                        "valor": 100.0,
+                        "descricao": " (Baixa Lote)",
+                        "orcamento_id": "84efd111-8a5f-40ce-87ad-3751d553b120",
+                        "forma_pagamento": "Lote",
+                        "nao_previsto": false
+                    },
+                    {
+                        "transacao_id": "efdd2693-d8a6-4fbb-b18b-06a52abe8287",
+                        "ativo": false,
+                        "data_real": "2026-03-26",
+                        "conta": "NLG",
+                        "faturado": 0.0,
+                        "valor": 2000.0,
+                        "descricao": " (Baixa Lote)",
+                        "orcamento_id": "ad785810-1871-4250-aa2f-2a8fb260f00d",
+                        "forma_pagamento": "Lote",
+                        "nao_previsto": false
+                    },
+                    {
+                        "transacao_id": "fb02ce9a-36c5-432b-aed2-37378bf78922",
+                        "ativo": true,
+                        "data_real": "2026-04-01",
+                        "conta": "IMPOSTO",
+                        "faturado": 0.0,
+                        "valor": 600.0,
+                        "descricao": " (Baixa Lote)",
+                        "orcamento_id": "8617e5b0-011a-487d-b083-fc9902299730",
+                        "forma_pagamento": "Lote",
+                        "nao_previsto": false
+                    },
+                    {
+                        "transacao_id": "5c547b66-c384-40cb-be43-50b21ea7172c",
+                        "ativo": true,
+                        "data_real": "2026-04-01",
+                        "conta": "PASSAGENS AEREAS",
+                        "faturado": 0.0,
+                        "valor": 650.0,
+                        "descricao": " (Baixa Lote)",
+                        "orcamento_id": "0ae95d74-0155-4821-a9a4-aa489d7e0b3f",
+                        "forma_pagamento": "Lote",
+                        "nao_previsto": false
+                    },
+                    {
+                        "transacao_id": "428c9010-6757-4a9f-bc63-f5b7c1f90a31",
+                        "ativo": true,
+                        "data_real": "2026-04-01",
+                        "conta": "FOLHA ADM",
+                        "faturado": 0.0,
+                        "valor": 900.0,
+                        "descricao": " (Baixa Lote)",
+                        "orcamento_id": "37c45777-0372-4f34-a181-ddff22ee1d3c",
+                        "forma_pagamento": "Lote",
+                        "nao_previsto": false
+                    },
+                    {
+                        "transacao_id": "af8152d1-3da9-4052-a9f0-00d5f7853c61",
+                        "ativo": true,
+                        "data_real": "2026-04-01",
+                        "conta": "Parcela de carro",
+                        "faturado": 0.0,
+                        "valor": 250.0,
+                        "descricao": " (Baixa Lote)",
+                        "orcamento_id": "9eac7617-fe6e-49c6-a3d2-97f76663da38",
+                        "forma_pagamento": "Lote",
+                        "nao_previsto": false
+                    },
+                    {
+                        "transacao_id": "a724b015-083f-4fb1-bb50-88d086b2c4ec",
+                        "ativo": true,
+                        "data_real": "2026-04-01",
+                        "conta": "Capital de Giro STONE",
+                        "faturado": 0.0,
+                        "valor": 100.0,
+                        "descricao": " (Baixa Lote)",
+                        "orcamento_id": "84efd111-8a5f-40ce-87ad-3751d553b120",
+                        "forma_pagamento": "Lote",
+                        "nao_previsto": false
+                    },
+                    {
+                        "transacao_id": "dda254ed-0d94-40d2-9a57-3eee5386daf6",
+                        "ativo": true,
+                        "data_real": "2026-04-01",
+                        "conta": "NLG",
+                        "faturado": 0.0,
+                        "valor": 2000.0,
+                        "descricao": " (Baixa Lote)",
+                        "orcamento_id": "ad785810-1871-4250-aa2f-2a8fb260f00d",
+                        "forma_pagamento": "Lote",
+                        "nao_previsto": false
+                    },
+                    {
+                        "transacao_id": "e6078d39-0752-48a9-b4fe-0581aafd032b",
+                        "ativo": false,
+                        "data_real": "2026-03-26",
+                        "conta": "VENDAS",
+                        "faturado": 5500.0,
+                        "valor": 5500.0,
+                        "descricao": "",
+                        "forma_pagamento": "PIX",
+                        "nao_previsto": true
+                    },
+                    {
+                        "transacao_id": "ada3dec1-f6e8-4cfe-8b5e-59ded9210182",
+                        "ativo": true,
+                        "data_real": "2026-04-01",
+                        "conta": "VENDAS",
+                        "faturado": 5000.0,
+                        "valor": 5000.0,
+                        "descricao": "",
+                        "forma_pagamento": "PIX",
+                        "nao_previsto": true
+                    }
+                ],
+                "bancos": [
+                    {
+                        "id": "1774134340.181513",
+                        "nome": "SICOOB",
+                        "gerente": "IGOR",
+                        "whatsapp": "(19) 99335-8939",
+                        "agencia": "5004",
+                        "conta": "10264930",
+                        "saldo": 1000.0,
+                        "ultima_atualizacao": "26/03/2026"
+                    },
+                    {
+                        "id": "1774134450.728055",
+                        "nome": "SICRED",
+                        "gerente": "RENAN",
+                        "whatsapp": "(19) 99952-5737",
+                        "agencia": "0718",
+                        "conta": "424640",
+                        "saldo": 1000.0,
+                        "ultima_atualizacao": "26/03/2026"
+                    },
+                    {
+                        "id": "1774565979.471549",
+                        "nome": "STONE",
+                        "gerente": "",
+                        "whatsapp": "",
+                        "agencia": "",
+                        "conta": "",
+                        "saldo": 500.0,
+                        "ultima_atualizacao": "26/03/2026"
+                    },
+                    {
+                        "id": "1774575485.774652",
+                        "nome": "ITAU",
+                        "gerente": "",
+                        "whatsapp": "",
+                        "agencia": "",
+                        "conta": "",
+                        "saldo": 0.0,
+                        "ultima_atualizacao": "26/03/2026"
+                    }
+                ],
+                "pendencias": [],
+                "saldo_inicial": 3000.0,
+                "regras_pendencia": {
+                    "tipo": "Prazo (Dias)",
+                    "limite": 3
+                },
+                "formas_pagamento": [
+                    "PIX",
+                    "Cart\u00e3o de Cr\u00e9dito",
+                    "Boleto"
+                ],
+                "acao_cfo": {
+                    "entradas": {
+                        "receita": {
+                            "todas": {
+                                "pct": 10.0,
+                                "data": "2026-03-26"
+                            }
+                        }
+                    },
+                    "saidas": {}
+                }
+            },
+            "ativo": true,
+            "cenarios": {
+                "c2": 20.0,
+                "c3": 30.0
+            }
+        },
+        "emp_97dcb292": {
+            "nome": "LIBERTY",
+            "cnpj": "03727532000113",
+            "obs": "",
+            "dados": {
+                "plano_contas": [
+                    {
+                        "nome_conta": "VENDAS",
+                        "categoria_dre": "receita"
+                    },
+                    {
+                        "nome_conta": "IMPOSTO",
+                        "categoria_dre": "deducao"
+                    },
+                    {
+                        "nome_conta": "PASSAGENS AEREAS",
+                        "categoria_dre": "custo_variavel"
+                    },
+                    {
+                        "nome_conta": "FOLHA ADM",
+                        "categoria_dre": "despesa_operacional"
+                    },
+                    {
+                        "nome_conta": "Outras receitas",
+                        "categoria_dre": "outras_receitas"
+                    },
+                    {
+                        "nome_conta": "Parcela de carro",
+                        "categoria_dre": "investimento"
+                    },
+                    {
+                        "nome_conta": "Capital de Giro STONE",
+                        "categoria_dre": "emprestimo"
+                    },
+                    {
+                        "nome_conta": "NLG",
+                        "categoria_dre": "distribuicao_lucro"
+                    }
+                ],
+                "orcamentos": [],
+                "lancamentos_reais": [],
+                "bancos": [
+                    {
+                        "id": "1774565933.843432",
+                        "nome": "SANTANDER",
+                        "gerente": "",
+                        "whatsapp": "",
+                        "agencia": "",
+                        "conta": "",
+                        "saldo": 1000.0,
+                        "ultima_atualizacao": "26/03/2026"
+                    },
+                    {
+                        "id": "1774565942.500961",
+                        "nome": "ITAU",
+                        "gerente": "",
+                        "whatsapp": "",
+                        "agencia": "",
+                        "conta": "",
+                        "saldo": 1000.0,
+                        "ultima_atualizacao": "26/03/2026"
+                    }
+                ],
+                "pendencias": [],
+                "saldo_inicial": 2000.0,
+                "regras_pendencia": {
+                    "tipo": "Quantidade",
+                    "limite": 5
+                },
+                "formas_pagamento": [
+                    "PIX",
+                    "Cart\u00e3o de Cr\u00e9dito",
+                    "Boleto",
+                    "Dinheiro"
+                ],
+                "acao_cfo": {
+                    "entradas": {},
+                    "saidas": {}
+                }
+            },
+            "ativo": true,
+            "cenarios": {
+                "c2": 30.0,
+                "c3": 70.0
+            }
+        }
+    }
+}
