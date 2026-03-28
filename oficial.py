@@ -35,18 +35,21 @@ components.html(
     "    let parts = strNum.split(','); parts[0] = parts[0].replace(/\\B(?=(\\d{3})+(?!\\d))/g, '.');\n"
     "    return 'R$ ' + parts.join(',');\n"
     "}\n"
-    "parentDoc.addEventListener('input', function(e) {\n"
-    "    if (e.target && e.target.tagName === 'INPUT' && (e.target.placeholder === 'R$ 0,00' || e.target.value.includes('R$'))) {\n"
-    "        if (e.target.dataset.isMasking === 'true') return;\n"
-    "        let finalStr = formatCurrency(e.target.value);\n"
-    "        if (e.target.value !== finalStr && finalStr !== 'R$ 0,00') {\n"
-    "            e.target.dataset.isMasking = 'true';\n"
-    "            let nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;\n"
-    "            if (nativeInputValueSetter) { nativeInputValueSetter.call(e.target, finalStr); e.target.dispatchEvent(new Event('input', { bubbles: true })); }\n"
-    "            e.target.dataset.isMasking = 'false';\n"
+    "if (!parentDoc.__dreCurrencyMaskListenerAdded) {\n"
+    "    parentDoc.__dreCurrencyMaskListenerAdded = true;\n"
+    "    parentDoc.addEventListener('input', function(e) {\n"
+    "        if (e.target && e.target.tagName === 'INPUT' && (e.target.placeholder === 'R$ 0,00' || e.target.value.includes('R$'))) {\n"
+    "            if (e.target.dataset.isMasking === 'true') return;\n"
+    "            let finalStr = formatCurrency(e.target.value);\n"
+    "            if (e.target.value !== finalStr && finalStr !== 'R$ 0,00') {\n"
+    "                e.target.dataset.isMasking = 'true';\n"
+    "                let nativeInputValueSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;\n"
+    "                if (nativeInputValueSetter) { nativeInputValueSetter.call(e.target, finalStr); e.target.dispatchEvent(new Event('input', { bubbles: true })); }\n"
+    "                e.target.dataset.isMasking = 'false';\n"
+    "            }\n"
     "        }\n"
-    "    }\n"
-    "}, true);\n"
+    "    }, true);\n"
+    "}\n"
     "</script>", width=0, height=0
 )
 
@@ -55,6 +58,80 @@ components.html(
 # ---------------------------------------------------------
 BASE_DIR = Path(__file__).resolve().parent
 DB_FILE = Path(os.getenv("DRE_DB_FILE", BASE_DIR / "dre_database.json"))
+DEFAULT_FORMAS_PAGAMENTO = ["PIX", "Cartão de Crédito", "Boleto", "Dinheiro"]
+
+def _to_float(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+def _sanitize_empresa(emp):
+    emp = emp if isinstance(emp, dict) else {}
+    dados = emp.get("dados", {}) if isinstance(emp.get("dados", {}), dict) else {}
+    plano_contas = []
+    for c in dados.get("plano_contas", []):
+        if not isinstance(c, dict):
+            continue
+        nome_conta = str(c.get("nome_conta", "")).strip()
+        categoria_dre = str(c.get("categoria_dre", "")).strip()
+        if not nome_conta or not categoria_dre:
+            continue
+        plano_contas.append({
+            "nome_conta": nome_conta,
+            "categoria_dre": categoria_dre,
+            "exige_faturamento": bool(c.get("exige_faturamento", False)),
+        })
+    bancos = []
+    for b in dados.get("bancos", []):
+        if not isinstance(b, dict):
+            continue
+        bancos.append({
+            "id": str(b.get("id") or uuid.uuid4()),
+            "nome": str(b.get("nome", "Banco")),
+            "gerente": str(b.get("gerente", "")),
+            "whatsapp": str(b.get("whatsapp", "")),
+            "agencia": str(b.get("agencia", "")),
+            "conta": str(b.get("conta", "")),
+            "saldo": _to_float(b.get("saldo", 0.0)),
+            "ultima_atualizacao": str(b.get("ultima_atualizacao", date.today().strftime("%d/%m/%Y"))),
+        })
+    dados_sanitizados = {
+        "plano_contas": plano_contas,
+        "orcamentos": dados.get("orcamentos", []) if isinstance(dados.get("orcamentos", []), list) else [],
+        "lancamentos_reais": dados.get("lancamentos_reais", []) if isinstance(dados.get("lancamentos_reais", []), list) else [],
+        "bancos": bancos,
+        "pendencias": dados.get("pendencias", []) if isinstance(dados.get("pendencias", []), list) else [],
+        "saldo_inicial": _to_float(dados.get("saldo_inicial", 0.0)),
+        "regras_pendencia": dados.get("regras_pendencia", {"tipo": "Quantidade", "limite": 5}) if isinstance(dados.get("regras_pendencia", {}), dict) else {"tipo": "Quantidade", "limite": 5},
+        "formas_pagamento": dados.get("formas_pagamento", DEFAULT_FORMAS_PAGAMENTO) if isinstance(dados.get("formas_pagamento", []), list) else DEFAULT_FORMAS_PAGAMENTO.copy(),
+        "acao_cfo": dados.get("acao_cfo", {"entradas": {}, "saidas": {}}) if isinstance(dados.get("acao_cfo", {}), dict) else {"entradas": {}, "saidas": {}},
+    }
+    return {
+        "nome": str(emp.get("nome", "Empresa")),
+        "cnpj": str(emp.get("cnpj", "")),
+        "obs": str(emp.get("obs", "")),
+        "ativo": bool(emp.get("ativo", True)),
+        "cenarios": emp.get("cenarios", {"c2": 30.0, "c3": 70.0}) if isinstance(emp.get("cenarios", {}), dict) else {"c2": 30.0, "c3": 70.0},
+        "dados": dados_sanitizados
+    }
+
+def sanitize_db(data):
+    data = data if isinstance(data, dict) else {}
+    empresas = data.get("empresas", {}) if isinstance(data.get("empresas", {}), dict) else {}
+    sane = {}
+    for k, v in empresas.items():
+        sane[k] = _sanitize_empresa(v)
+    if not sane:
+        sane["emp_padrao_1"] = _sanitize_empresa({
+            "nome": "Empresa Matriz",
+            "cnpj": "",
+            "obs": "Criada automaticamente",
+            "ativo": True,
+            "cenarios": {"c2": 30.0, "c3": 70.0},
+            "dados": {}
+        })
+    return {"empresas": sane}
 
 def load_db():
     if DB_FILE.exists():
@@ -63,16 +140,14 @@ def load_db():
                 data = json.load(f)
                 if "empresas" not in data:
                     migrated = {"empresas": {"emp_principal_1": {"nome": "Empresa Principal", "cnpj": "", "obs": "Migração Automática", "ativo": True, "dados": data}}}
-                    return migrated
-                for k, v in data["empresas"].items():
-                    if "ativo" not in v: v["ativo"] = True
-                    if "cenarios" not in v: v["cenarios"] = {"c2": 30.0, "c3": 70.0}
-                return data
-        except: pass
-    return {"empresas": {"emp_padrao_1": {"nome": "Empresa Matriz", "cnpj": "", "obs": "Criada automaticamente", "ativo": True, "cenarios": {"c2": 30.0, "c3": 70.0}, "dados": {"plano_contas": [], "orcamentos": [], "lancamentos_reais": [], "bancos": [], "pendencias": [], "saldo_inicial": 0.0, "regras_pendencia": {"tipo": "Quantidade", "limite": 5}, "formas_pagamento": ["PIX", "Cartão de Crédito", "Boleto", "Dinheiro"], "acao_cfo": {"entradas": {}, "saidas": {}}}}}}
+                    return sanitize_db(migrated)
+                return sanitize_db(data)
+        except Exception:
+            pass
+    return sanitize_db({})
 
 def save_db():
-    if st.session_state.empresa_selecionada != "TODAS":
+    if st.session_state.empresa_selecionada != "TODAS" and st.session_state.empresa_selecionada in st.session_state.db["empresas"]:
         eid = st.session_state.empresa_selecionada
         st.session_state.db["empresas"][eid]["dados"] = {
             "plano_contas": st.session_state.plano_contas,
@@ -90,8 +165,20 @@ def save_db():
 
 if "db_loaded" not in st.session_state:
     st.session_state.db = load_db()
-    st.session_state.empresa_selecionada = list(st.session_state.db["empresas"].keys())[0]
+    ativos = [k for k, v in st.session_state.db["empresas"].items() if v.get("ativo", True)]
+    st.session_state.empresa_selecionada = ativos[0] if ativos else list(st.session_state.db["empresas"].keys())[0]
     st.session_state.db_loaded = True
+
+# Garante que a empresa selecionada sempre exista (evita quebrar após alterações de cadastro).
+if st.session_state.empresa_selecionada != "TODAS" and st.session_state.empresa_selecionada not in st.session_state.db["empresas"]:
+    ativos = [k for k, v in st.session_state.db["empresas"].items() if v.get("ativo", True)]
+    st.session_state.empresa_selecionada = ativos[0] if ativos else list(st.session_state.db["empresas"].keys())[0]
+
+# Sincroniza seleção vinda do widget antes do carregamento de contexto.
+if "empresa_seletor" in st.session_state and st.session_state.empresa_seletor != st.session_state.empresa_selecionada:
+    st.session_state.empresa_selecionada = st.session_state.empresa_seletor
+    if st.session_state.empresa_selecionada == "TODAS" and st.session_state.get("pagina_atual") not in ["DASH", "DRE RESUMIDO", "DRE ANUAL"]:
+        st.session_state.pagina_atual = "DASH"
 
 # SINCRONIZADOR DE CONTEXTO (Troca de Empresas)
 if st.session_state.empresa_selecionada == "TODAS":
@@ -100,12 +187,16 @@ if st.session_state.empresa_selecionada == "TODAS":
     agg_saldo = 0.0
     for emp in st.session_state.db["empresas"].values():
         if not emp.get("ativo", True): continue
-        d = emp["dados"]
-        for pc in d.get("plano_contas", []): agg_pc[pc["nome_conta"]] = pc
+        d = emp.get("dados", {})
+        for pc in d.get("plano_contas", []):
+            if isinstance(pc, dict) and pc.get("nome_conta"):
+                agg_pc[pc["nome_conta"]] = pc
         agg_orc.extend(d.get("orcamentos", []))
         agg_lanc.extend(d.get("lancamentos_reais", []))
         agg_pend.extend(d.get("pendencias", []))
-        agg_bancos.extend([{"empresa": emp["nome"], **b} for b in d.get("bancos", [])])
+        for b in d.get("bancos", []):
+            if isinstance(b, dict):
+                agg_bancos.append({"empresa": emp.get("nome", "Empresa"), **b})
         agg_saldo += d.get("saldo_inicial", 0.0)
     
     st.session_state.plano_contas = list(agg_pc.values())
@@ -120,7 +211,7 @@ if st.session_state.empresa_selecionada == "TODAS":
     st.session_state.cenarios_cfg = {"c2": 30.0, "c3": 70.0}
 else:
     emp_cfg = st.session_state.db["empresas"][st.session_state.empresa_selecionada]
-    d = emp_cfg["dados"]
+    d = emp_cfg.get("dados", {})
     st.session_state.plano_contas = d.get("plano_contas", [])
     st.session_state.orcamentos = d.get("orcamentos", [])
     st.session_state.lancamentos_reais = d.get("lancamentos_reais", [])
@@ -128,7 +219,7 @@ else:
     st.session_state.pendencias = d.get("pendencias", [])
     st.session_state.saldo_inicial = d.get("saldo_inicial", 0.0)
     st.session_state.regras_pendencia = d.get("regras_pendencia", {"tipo": "Quantidade", "limite": 5})
-    st.session_state.formas_pagamento = d.get("formas_pagamento", ["PIX", "Cartão de Crédito", "Boleto", "Dinheiro"])
+    st.session_state.formas_pagamento = d.get("formas_pagamento", DEFAULT_FORMAS_PAGAMENTO.copy())
     st.session_state.acao_cfo = d.get("acao_cfo", {"entradas": {}, "saidas": {}})
     st.session_state.cenarios_cfg = emp_cfg.get("cenarios", {"c2": 30.0, "c3": 70.0})
 
@@ -411,11 +502,9 @@ with c_filtro2:
     opcoes_empresa = {"TODAS": "🌐 Consolidado (Todas as Empresas)"}
     for k, v in st.session_state.db["empresas"].items():
         if v.get("ativo", True): opcoes_empresa[k] = f"🏢 {v['nome']}"
-    sel_empresa = st.selectbox("Ambiente Ativo", list(opcoes_empresa.keys()), format_func=lambda x: opcoes_empresa[x], label_visibility="collapsed")
-    if sel_empresa != st.session_state.empresa_selecionada:
-        st.session_state.empresa_selecionada = sel_empresa
-        if sel_empresa == "TODAS" and st.session_state.pagina_atual not in ["DASH", "DRE RESUMIDO", "DRE ANUAL"]: st.session_state.pagina_atual = "DASH"
-        st.rerun()
+    if st.session_state.get("empresa_seletor") not in opcoes_empresa:
+        st.session_state.empresa_seletor = st.session_state.empresa_selecionada if st.session_state.empresa_selecionada in opcoes_empresa else "TODAS"
+    st.selectbox("Ambiente Ativo", list(opcoes_empresa.keys()), key="empresa_seletor", format_func=lambda x: opcoes_empresa[x], label_visibility="collapsed")
 
 st.markdown("<div id='nav-anchor' style='margin-top: 15px;'></div>", unsafe_allow_html=True)
 
@@ -429,7 +518,7 @@ else:
 
 for i, (label, val) in enumerate(nav_items):
     with cols_nav[i]:
-        if st.button(label, type="primary" if st.session_state.pagina_atual == val else "secondary", use_container_width=True, key=f"nav_btn_top_{val}"): st.session_state.pagina_atual = val; st.rerun()
+        if st.button(label, type="primary" if st.session_state.pagina_atual == val else "secondary", width="stretch", key=f"nav_btn_top_{val}"): st.session_state.pagina_atual = val
 
 dados_consolidados = consolidar_dados()
 dre_data = calcular_dre(dados_consolidados)
@@ -470,7 +559,10 @@ if st.session_state.pagina_atual == "DASH":
     if st.session_state.empresa_selecionada == "TODAS" and st.session_state.bancos:
         bancos_html = "<div style='display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; margin-bottom: 15px;'>"
         for b in st.session_state.bancos:
-            bancos_html += f"<div style='min-width: 200px; background-color: white; padding: 12px; border-radius: 12px; border: 1px solid #E2E8F0;'><div style='font-size: 10px; color: #64748B; font-weight: 700;'>{b['empresa']}</div><div style='font-size: 13px; font-weight: 600; color: #1E293B;'>{b['nome']}</div><div style='font-size: 16px; font-weight: 800; color: #0F172A; margin-top: 4px;'>{formatar_moeda(b['saldo'])}</div></div>"
+            nome_empresa = b.get("empresa", "Empresa")
+            nome_banco = b.get("nome", "Banco")
+            saldo_banco = float(b.get("saldo", 0.0))
+            bancos_html += f"<div style='min-width: 200px; background-color: white; padding: 12px; border-radius: 12px; border: 1px solid #E2E8F0;'><div style='font-size: 10px; color: #64748B; font-weight: 700;'>{nome_empresa}</div><div style='font-size: 13px; font-weight: 600; color: #1E293B;'>{nome_banco}</div><div style='font-size: 16px; font-weight: 800; color: #0F172A; margin-top: 4px;'>{formatar_moeda(saldo_banco)}</div></div>"
         bancos_html += "</div>"
         st.markdown("<div class='saas-section-title' style='margin-bottom: 10px;'>Saldos por Empresa</div>", unsafe_allow_html=True)
         st.markdown(bancos_html, unsafe_allow_html=True)
@@ -949,7 +1041,7 @@ elif st.session_state.pagina_atual == "PLANEJAMENTO":
         with co: obs = st.text_input("Observação", key=ko, disabled=not cs)
         with cb:
             st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-            if st.button("💾 SALVAR", type="primary", use_container_width=True, disabled=(not cs or (is_blocked and p1 == 0)), key="btn_salvar_orcamento"):
+            if st.button("💾 SALVAR", type="primary", width="stretch", disabled=(not cs or (is_blocked and p1 == 0)), key="btn_salvar_orcamento"):
                 nls, dbq = [], 0
                 
                 def ajustar_fds(d, acao):
@@ -1012,7 +1104,7 @@ elif st.session_state.pagina_atual == "PLANEJAMENTO":
                 dfof['Lançamento'] = pd.to_datetime(dfof['data_lancamento']).dt.strftime('%d/%m/%Y')
 
                 dfv = dfof[[" ", "Status", "Lançamento", "Vencimento", "Categoria", "conta", "p1", "p2", "p3", "descricao"]].rename(columns={"conta":"Conta", "p1":"C1", "p2":"C2", "p3":"C3", "descricao":"Obs"})
-                edo = st.data_editor(dfv, hide_index=True, use_container_width=True, disabled=["Status", "Lançamento", "Categoria", "Conta"], column_config={" ": st.column_config.CheckboxColumn(" ", width="small"), "Vencimento": st.column_config.DateColumn("Vencimento (Prorrogar/Antecipar)", format="DD/MM/YYYY"), "C1": st.column_config.NumberColumn("C1", format="R$ %.2f"), "C2": st.column_config.NumberColumn("C2", format="R$ %.2f"), "C3": st.column_config.NumberColumn("C3", format="R$ %.2f")})
+                edo = st.data_editor(dfv, hide_index=True, width="stretch", disabled=["Status", "Lançamento", "Categoria", "Conta"], column_config={" ": st.column_config.CheckboxColumn(" ", width="small"), "Vencimento": st.column_config.DateColumn("Vencimento (Prorrogar/Antecipar)", format="DD/MM/YYYY"), "C1": st.column_config.NumberColumn("C1", format="R$ %.2f"), "C2": st.column_config.NumberColumn("C2", format="R$ %.2f"), "C3": st.column_config.NumberColumn("C3", format="R$ %.2f")})
                 
                 he = False
                 for idx in dfof.index:
@@ -1030,11 +1122,11 @@ elif st.session_state.pagina_atual == "PLANEJAMENTO":
                     st.markdown("<div style='margin-top: 15px; padding: 15px; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px;'>", unsafe_allow_html=True)
                     ca1, ca2, _ = st.columns([2, 2, 6])
                     with ca1:
-                        if st.button(f"🗑️ Excluir ({len(si)})", type="primary", use_container_width=True, key="btn_excluir_orcamentos_lote"):
+                        if st.button(f"🗑️ Excluir ({len(si)})", type="primary", width="stretch", key="btn_excluir_orcamentos_lote"):
                             for i in sorted(si, reverse=True): st.session_state.orcamentos.pop(i)
                             save_db(); show_toast("Excluído com sucesso!"); time.sleep(1); st.rerun()
                     with ca2:
-                        if st.button(f"✅ Conciliar ({len(si)})", type="primary", use_container_width=True, key="btn_conciliar_orcamentos_lote"):
+                        if st.button(f"✅ Conciliar ({len(si)})", type="primary", width="stretch", key="btn_conciliar_orcamentos_lote"):
                             for i in si: st.session_state.orcamentos[i]["efetivado"] = True
                             save_db(); show_toast("Conciliado!"); time.sleep(1); st.rerun()
                     st.markdown("</div>", unsafe_allow_html=True)
@@ -1068,10 +1160,10 @@ elif st.session_state.pagina_atual == "REALIZADO":
     cf1, cf2, cf3, cf4 = st.columns([2.5, 2.5, 2, 2])
     with cf1:
         st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-        if st.button("✍️ Manual", type="primary" if mr == "MANUAL" else "secondary", use_container_width=True, key="btn_modo_manual"): st.session_state.modo_realizado = "MANUAL"; st.rerun()
+        if st.button("✍️ Manual", type="primary" if mr == "MANUAL" else "secondary", width="stretch", key="btn_modo_manual"): st.session_state.modo_realizado = "MANUAL"
     with cf2:
         st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-        if st.button("⚡ Lote", type="primary" if mr == "LOTE" else "secondary", use_container_width=True, key="btn_modo_lote"): st.session_state.modo_realizado = "LOTE"; st.rerun()
+        if st.button("⚡ Lote", type="primary" if mr == "LOTE" else "secondary", width="stretch", key="btn_modo_lote"): st.session_state.modo_realizado = "LOTE"
     with cf3: st.session_state.d_ini_op = st.date_input("Início", dio, format="DD/MM/YYYY")
     with cf4: st.session_state.d_fim_op = st.date_input("Fim", dfo, format="DD/MM/YYYY")
     st.markdown("</div>", unsafe_allow_html=True)
@@ -1107,7 +1199,7 @@ elif st.session_state.pagina_atual == "REALIZADO":
             with c7: f_pag = st.selectbox("Forma de Pagamento", st.session_state.formas_pagamento if st.session_state.formas_pagamento else ["Não Cadastrado"], key=f"fpag_{rl}")
             with c8:
                 st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-                bs = st.button("✅ SALVAR", type="primary", disabled=(not csel or csel == "Sem contas" or (is_blocked and vr == 0)), use_container_width=True, key="btn_salvar_lanc_manual")
+                bs = st.button("✅ SALVAR", type="primary", disabled=(not csel or csel == "Sem contas" or (is_blocked and vr == 0)), width="stretch", key="btn_salvar_lanc_manual")
 
             if bs:
                 if vr <= 0: st.error("Valor zerado.")
@@ -1137,14 +1229,14 @@ elif st.session_state.pagina_atual == "REALIZADO":
                     dfvp = dfpf[["Baixar?", "Vencimento", "Categoria", "conta", "p1", "id", "descricao"]].rename(columns={"conta":"Origem (Conta)", "p1":"Projetado (R$)", "descricao":"Observação"})
                     dfvp["Projetado (R$)"] = dfvp["Projetado (R$)"].astype(float); dfvp["Realizado (Edite aqui)"] = np.nan
                     
-                    edp = st.data_editor(dfvp, hide_index=True, use_container_width=True, disabled=["Vencimento", "Categoria", "Origem (Conta)", "Observação", "Projetado (R$)"], column_config={"Baixar?": st.column_config.CheckboxColumn("Baixar?", width="small"), "Projetado (R$)": st.column_config.NumberColumn("Projetado (R$)", format="R$ %.2f"), "Realizado (Edite aqui)": st.column_config.NumberColumn("Realizado (Edite aqui)", format="R$ %.2f", min_value=0.0)})
+                    edp = st.data_editor(dfvp, hide_index=True, width="stretch", disabled=["Vencimento", "Categoria", "Origem (Conta)", "Observação", "Projetado (R$)"], column_config={"Baixar?": st.column_config.CheckboxColumn("Baixar?", width="small"), "Projetado (R$)": st.column_config.NumberColumn("Projetado (R$)", format="R$ %.2f"), "Realizado (Edite aqui)": st.column_config.NumberColumn("Realizado (Edite aqui)", format="R$ %.2f", min_value=0.0)})
                     
                     st.markdown("<div style='background-color: #F8FAFC; border: 1px solid #E2E8F0; padding: 15px 20px; border-radius: 12px; margin-top: 15px;'>", unsafe_allow_html=True)
                     cb1, cb2, _ = st.columns([2, 3, 5])
                     with cb1: dba = st.date_input("Data da Efetivação (Pagamento):", date.today(), format="DD/MM/YYYY")
                     with cb2:
                         st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-                        if st.button("⚡ Confirmar Efetivação", type="primary", use_container_width=True, key="btn_confirmar_efetivacao_lote_real"):
+                        if st.button("⚡ Confirmar Efetivação", type="primary", width="stretch", key="btn_confirmar_efetivacao_lote_real"):
                             ls = edp[edp["Baixar?"] == True]
                             if ls.empty: st.error("Selecione itens.")
                             elif any(pd.isna(r["Realizado (Edite aqui)"]) or float(r["Realizado (Edite aqui)"]) <= 0 for _, r in ls.iterrows()): st.error("⚠️ Valores zerados detectados.")
@@ -1199,7 +1291,7 @@ elif st.session_state.pagina_atual == "REALIZADO":
 
                 dflv = dfp[["Sel.", "Data", "Categoria", "Origem", "descricao", "forma_pagamento", "faturado", "valor"]].rename(columns={"descricao":"Observação", "forma_pagamento": "Forma Pag.", "faturado":"Faturado Info (R$)", "valor":"Liquidez/Caixa (R$)"})
                 
-                edl = st.data_editor(dflv, hide_index=True, use_container_width=True, disabled=["Data", "Categoria", "Origem", "Forma Pag."], column_config={"Sel.": st.column_config.CheckboxColumn("Sel.", width="small"), "Faturado Info (R$)": st.column_config.NumberColumn("Faturado Info (R$)", format="R$ %.2f"), "Liquidez/Caixa (R$)": st.column_config.NumberColumn("Liquidez/Caixa (R$)", format="R$ %.2f")})
+                edl = st.data_editor(dflv, hide_index=True, width="stretch", disabled=["Data", "Categoria", "Origem", "Forma Pag."], column_config={"Sel.": st.column_config.CheckboxColumn("Sel.", width="small"), "Faturado Info (R$)": st.column_config.NumberColumn("Faturado Info (R$)", format="R$ %.2f"), "Liquidez/Caixa (R$)": st.column_config.NumberColumn("Liquidez/Caixa (R$)", format="R$ %.2f")})
 
                 hel = False
                 for di, ri in enumerate(dfp.index):
@@ -1250,8 +1342,9 @@ elif st.session_state.pagina_atual == "CONCILIACAO":
         for i, b in enumerate(st.session_state.bancos):
             with cols[i % 3]:
                 st.markdown(f"<div style='background-color: #F8FAFC; padding: 15px 20px 8px 20px; border-radius: 16px 16px 0 0; border: 1px solid #D1E0FF; border-bottom: none;'><div style='display: flex; justify-content: space-between; align-items: center;'><div style='font-weight: 700; color: #1E293B; font-size: 15px;'>🏦 {b['nome']}</div><div style='font-size: 10px; background-color: #E2E8F0; color: #475569; padding: 2px 8px; border-radius: 10px;'>{b.get('ultima_atualizacao', '-')}</div></div></div>", unsafe_allow_html=True)
-                ks = f"s_edit_{b['id']}"
-                if ks not in st.session_state: st.session_state[ks] = formatar_moeda(b["saldo"])
+                ks = f"s_edit_{b.get('id', i)}"
+                if ks not in st.session_state:
+                    st.session_state[ks] = formatar_moeda(_to_float(b.get("saldo", 0.0)))
                 st.text_input("Saldo", key=ks, on_change=aplicar_mascara_e_salvar_saldo, args=(i, ks), label_visibility="collapsed")
                 st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)
@@ -1275,7 +1368,7 @@ elif st.session_state.pagina_atual == "CONCILIACAO":
             st.markdown("<div class='saas-form-group-title' style='margin-top: 10px;'>Adicionar Entrada Pendente</div>", unsafe_allow_html=True)
             c1, c2, c3, c4, c5 = st.columns([2, 3, 2, 2, 3])
             with c1: pdi = st.date_input("Data", date.today(), format="DD/MM/YYYY", key="pin_d")
-            with c2: pbi = st.selectbox("Banco", [b["nome"] for b in st.session_state.bancos], key="pin_b")
+            with c2: pbi = st.selectbox("Banco", [b.get("nome", "Banco") for b in st.session_state.bancos], key="pin_b")
             c_disp = [c["nome_conta"] for c in st.session_state.plano_contas if c["categoria_dre"] in ["receita", "outras_receitas"]]
             with c3: pin_c = st.selectbox("Categoria (Opcional)", ["(Não Identificado)"] + c_disp, key="pin_c")
             with c4: st.text_input("Valor", key="p_in_val", on_change=aplicar_mascara_moeda, args=("p_in_val",)); vli = parse_currency(st.session_state.get("p_in_val", "0"))
@@ -1289,7 +1382,7 @@ elif st.session_state.pagina_atual == "CONCILIACAO":
             if pi:
                 st.markdown("<hr style='border-color: #E2E8F0; margin: 20px 0;'><div class='saas-form-group-title'>Resolver (Identificar)</div>", unsafe_allow_html=True)
                 dfpi = pd.DataFrame(pi); dfpi.insert(0, "Sel", False); dfvpi = dfpi[["Sel", "data", "banco", "observacao", "valor", "id"]].copy(); dfvpi['data'] = pd.to_datetime(dfvpi['data']).dt.strftime('%d/%m/%Y')
-                epi = st.data_editor(dfvpi, hide_index=True, use_container_width=True, disabled=["data", "banco", "observacao", "valor"], column_config={"Sel": st.column_config.CheckboxColumn("Sel", width="small"), "valor": st.column_config.NumberColumn("Valor", format="R$ %.2f"), "id": None})
+                epi = st.data_editor(dfvpi, hide_index=True, width="stretch", disabled=["data", "banco", "observacao", "valor"], column_config={"Sel": st.column_config.CheckboxColumn("Sel", width="small"), "valor": st.column_config.NumberColumn("Valor", format="R$ %.2f"), "id": None})
                 spi = epi[epi["Sel"] == True]
                 if not spi.empty:
                     if len(spi) > 1: st.warning("⚠️ Um por vez.")
@@ -1303,7 +1396,7 @@ elif st.session_state.pagina_atual == "CONCILIACAO":
                             osi = st.selectbox("Origem", ori, key=f"oi_{pid}") if ori else st.selectbox("Origem", ["Sem contas"], disabled=True, key=f"oiv_{pid}")
                         with m3:
                             st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-                            if st.button("Confirmar Identificação", type="primary", key=f"bi_conf_{pid}", use_container_width=True, disabled=not osi):
+                            if st.button("Confirmar Identificação", type="primary", key=f"bi_conf_{pid}", width="stretch", disabled=not osi):
                                 st.session_state.lancamentos_reais.append({"transacao_id": str(uuid.uuid4()), "ativo": True, "data_real": datetime.strptime(r["data"], "%d/%m/%Y").strftime("%Y-%m-%d"), "conta": osi, "faturado": 0.0, "valor": pval, "descricao": f"{pobs} (Resolvido: {pbk})", "nao_previsto": True})
                                 st.session_state.pendencias = [x for x in st.session_state.pendencias if x["id"] != pid]; save_db(); show_toast("Resolvido!"); time.sleep(1); st.rerun()
                         st.markdown("</div>", unsafe_allow_html=True)
@@ -1312,7 +1405,7 @@ elif st.session_state.pagina_atual == "CONCILIACAO":
             st.markdown("<div class='saas-form-group-title' style='margin-top: 10px;'>Adicionar Saída Pendente</div>", unsafe_allow_html=True)
             c1, c2, c3, c4, c5 = st.columns([2, 3, 2, 2, 3])
             with c1: pdo = st.date_input("Data", date.today(), format="DD/MM/YYYY", key="pout_d")
-            with c2: pbo = st.selectbox("Banco", [b["nome"] for b in st.session_state.bancos], key="pout_b")
+            with c2: pbo = st.selectbox("Banco", [b.get("nome", "Banco") for b in st.session_state.bancos], key="pout_b")
             c_disp2 = [c["nome_conta"] for c in st.session_state.plano_contas if c["categoria_dre"] not in ["receita", "outras_receitas"]]
             with c3: pout_c = st.selectbox("Categoria (Opcional)", ["(Não Identificado)"] + c_disp2, key="pout_c")
             with c4: st.text_input("Valor", key="p_out_val", on_change=aplicar_mascara_moeda, args=("p_out_val",)); vlo = parse_currency(st.session_state.get("p_out_val", "0"))
@@ -1326,7 +1419,7 @@ elif st.session_state.pagina_atual == "CONCILIACAO":
             if po:
                 st.markdown("<hr style='border-color: #E2E8F0; margin: 20px 0;'><div class='saas-form-group-title'>Resolver (Identificar)</div>", unsafe_allow_html=True)
                 dfpo = pd.DataFrame(po); dfpo.insert(0, "Sel", False); dfvpo = dfpo[["Sel", "data", "banco", "observacao", "valor", "id"]].copy(); dfvpo['data'] = pd.to_datetime(dfvpo['data']).dt.strftime('%d/%m/%Y')
-                epo = st.data_editor(dfvpo, hide_index=True, use_container_width=True, disabled=["data", "banco", "observacao", "valor"], column_config={"Sel": st.column_config.CheckboxColumn("Sel", width="small"), "valor": st.column_config.NumberColumn("Valor", format="R$ %.2f"), "id": None})
+                epo = st.data_editor(dfvpo, hide_index=True, width="stretch", disabled=["data", "banco", "observacao", "valor"], column_config={"Sel": st.column_config.CheckboxColumn("Sel", width="small"), "valor": st.column_config.NumberColumn("Valor", format="R$ %.2f"), "id": None})
                 spo = epo[epo["Sel"] == True]
                 if not spo.empty:
                     if len(spo) > 1: st.warning("⚠️ Um por vez.")
@@ -1340,7 +1433,7 @@ elif st.session_state.pagina_atual == "CONCILIACAO":
                             oso = st.selectbox("Origem", oro, key=f"oo_{pid}") if oro else st.selectbox("Origem", ["Sem contas"], disabled=True, key=f"oov_{pid}")
                         with m3:
                             st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-                            if st.button("Confirmar Identificação", type="primary", key=f"bo_conf_{pid}", use_container_width=True, disabled=not oso):
+                            if st.button("Confirmar Identificação", type="primary", key=f"bo_conf_{pid}", width="stretch", disabled=not oso):
                                 st.session_state.lancamentos_reais.append({"transacao_id": str(uuid.uuid4()), "ativo": True, "data_real": datetime.strptime(r["data"], "%d/%m/%Y").strftime("%Y-%m-%d"), "conta": oso, "faturado": 0.0, "valor": pval, "descricao": f"{pobs} (Resolvido: {pbk})", "nao_previsto": True})
                                 st.session_state.pendencias = [x for x in st.session_state.pendencias if x["id"] != pid]; save_db(); show_toast("Resolvido!"); time.sleep(1); st.rerun()
                         st.markdown("</div>", unsafe_allow_html=True)
@@ -1352,7 +1445,7 @@ elif st.session_state.pagina_atual == "CONCILIACAO":
                 dfvi = pd.DataFrame(p_vin); dfvi.insert(0, "Validar?", False)
                 dfv_v = dfvi[["Validar?", "data", "conta", "banco", "valor", "observacao", "id"]].rename(columns={"conta": "Pré-Categoria"}).copy()
                 dfv_v['data'] = pd.to_datetime(dfv_v['data']).dt.strftime('%d/%m/%Y')
-                ed_vi = st.data_editor(dfv_v, hide_index=True, use_container_width=True, disabled=["data", "Pré-Categoria", "banco", "valor", "observacao"], column_config={"Validar?": st.column_config.CheckboxColumn("Validar?", width="small"), "valor": st.column_config.NumberColumn("Valor", format="R$ %.2f")})
+                ed_vi = st.data_editor(dfv_v, hide_index=True, width="stretch", disabled=["data", "Pré-Categoria", "banco", "valor", "observacao"], column_config={"Validar?": st.column_config.CheckboxColumn("Validar?", width="small"), "valor": st.column_config.NumberColumn("Valor", format="R$ %.2f")})
                 si = ed_vi[ed_vi["Validar?"] == True]
                 if not si.empty:
                     if st.button("✅ Confirmar Validação em Lote", type="primary", key="btn_val_in"):
@@ -1372,7 +1465,7 @@ elif st.session_state.pagina_atual == "CONCILIACAO":
                 dfvo = pd.DataFrame(p_vou); dfvo.insert(0, "Validar?", False)
                 dfv_o = dfvo[["Validar?", "data", "conta", "banco", "valor", "observacao", "id"]].rename(columns={"conta": "Pré-Categoria"}).copy()
                 dfv_o['data'] = pd.to_datetime(dfv_o['data']).dt.strftime('%d/%m/%Y')
-                ed_vo = st.data_editor(dfv_o, hide_index=True, use_container_width=True, disabled=["data", "Pré-Categoria", "banco", "valor", "observacao"], column_config={"Validar?": st.column_config.CheckboxColumn("Validar?", width="small"), "valor": st.column_config.NumberColumn("Valor", format="R$ %.2f")})
+                ed_vo = st.data_editor(dfv_o, hide_index=True, width="stretch", disabled=["data", "Pré-Categoria", "banco", "valor", "observacao"], column_config={"Validar?": st.column_config.CheckboxColumn("Validar?", width="small"), "valor": st.column_config.NumberColumn("Valor", format="R$ %.2f")})
                 so = ed_vo[ed_vo["Validar?"] == True]
                 if not so.empty:
                     if st.button("✅ Confirmar Validação em Lote", type="primary", key="btn_val_out"):
@@ -1413,7 +1506,7 @@ elif st.session_state.pagina_atual == "ACAO_CFO":
         with c3: p_in = st.number_input("Ajuste (%)", value=0.0, step=1.0, key="cfo_pct_in", help="Ex: 5 para aumentar, -5 para reduzir.")
         with c4:
             st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-            if st.button("💾 Aplicar Regra", type="primary", use_container_width=True, key="btn_cfo_in", disabled=not sc_in):
+            if st.button("💾 Aplicar Regra", type="primary", width="stretch", key="btn_cfo_in", disabled=not sc_in):
                 chv = "todas" if s_in == "Todas as contas" else s_in
                 if c_in_int not in st.session_state.acao_cfo["entradas"]: st.session_state.acao_cfo["entradas"][c_in_int] = {}
                 st.session_state.acao_cfo["entradas"][c_in_int][chv] = {"pct": p_in, "data": date.today().strftime("%Y-%m-%d")}
@@ -1429,7 +1522,7 @@ elif st.session_state.pagina_atual == "ACAO_CFO":
         with c3: p_out = st.number_input("Ajuste (%)", value=0.0, step=1.0, key="cfo_pct_out", help="Ex: -5 para economizar, 5 para inflacionar.")
         with c4:
             st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-            if st.button("💾 Aplicar Regra", type="primary", use_container_width=True, key="btn_cfo_out", disabled=not sc_out):
+            if st.button("💾 Aplicar Regra", type="primary", width="stretch", key="btn_cfo_out", disabled=not sc_out):
                 chv = "todas" if s_out == "Todas as contas" else s_out
                 if c_out_int not in st.session_state.acao_cfo["saidas"]: st.session_state.acao_cfo["saidas"][c_out_int] = {}
                 st.session_state.acao_cfo["saidas"][c_out_int][chv] = {"pct": p_out, "data": date.today().strftime("%Y-%m-%d")}
@@ -1453,7 +1546,7 @@ elif st.session_state.pagina_atual == "ACAO_CFO":
             c1, c2 = st.columns([8, 2])
             with c1: st.markdown("<div class='saas-section-title' style='margin-top: 10px;'>Regras em Vigor</div>", unsafe_allow_html=True)
             with c2: 
-                if st.button("🗑️ Zerar Simulação", type="secondary", use_container_width=True):
+                if st.button("🗑️ Zerar Simulação", type="secondary", width="stretch"):
                     st.session_state.acao_cfo = {"entradas": {}, "saidas": {}}
                     save_db(); show_toast("Zerado!"); time.sleep(1); st.rerun()
                     
@@ -1484,7 +1577,7 @@ elif st.session_state.pagina_atual == "CADASTRO":
         with c3: e_obs = st.text_input("Observação")
         with c4:
             st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-            if st.button("➕ Cadastrar", type="primary", use_container_width=True, key="btn_add_empresa"):
+            if st.button("➕ Cadastrar", type="primary", width="stretch", key="btn_add_empresa"):
                 if not e_nome.strip(): st.error("Digite a Razão Social.")
                 else:
                     nid = f"emp_{str(uuid.uuid4())[:8]}"
@@ -1502,20 +1595,20 @@ elif st.session_state.pagina_atual == "CADASTRO":
         
         df_emp = pd.DataFrame(lista_empresas)
         df_emp["Ação"] = False
-        ed_emp = st.data_editor(df_emp, hide_index=True, use_container_width=True, disabled=["ID", "Razão Social", "CNPJ", "Obs", "Status"], column_config={"Ação": st.column_config.CheckboxColumn("Selecionar")})
+        ed_emp = st.data_editor(df_emp, hide_index=True, width="stretch", disabled=["ID", "Razão Social", "CNPJ", "Obs", "Status"], column_config={"Ação": st.column_config.CheckboxColumn("Selecionar")})
         si_emp = ed_emp[ed_emp["Ação"] == True]
         
         if not si_emp.empty:
             st.markdown("<div style='margin-top: 15px; padding: 15px; background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px;'>", unsafe_allow_html=True)
             ea1, ea2, ea3 = st.columns(3)
             with ea1:
-                if st.button("⏸️ Inativar / Ativar", use_container_width=True):
+                if st.button("⏸️ Inativar / Ativar", width="stretch"):
                     for _, r in si_emp.iterrows():
                         k = r["ID"]
                         st.session_state.db["empresas"][k]["ativo"] = not st.session_state.db["empresas"][k].get("ativo", True)
                     save_db(); st.rerun()
             with ea2:
-                if st.button("🗑️ Excluir Definitivo", use_container_width=True, type="primary"):
+                if st.button("🗑️ Excluir Definitivo", width="stretch", type="primary"):
                     for _, r in si_emp.iterrows():
                         k = r["ID"]
                         d_chk = st.session_state.db["empresas"][k]["dados"]
@@ -1537,7 +1630,7 @@ elif st.session_state.pagina_atual == "CADASTRO":
                 ef = st.checkbox("Controlar Faturado?", key="chk_add_fat") if TIPO_MAPEAMENTO[ts] in ["receita", "outras_receitas"] else False
             with c3:
                 st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-                if st.button("➕ Adicionar", type="primary", use_container_width=True, key="btn_add_plano_conta"):
+                if st.button("➕ Adicionar", type="primary", width="stretch", key="btn_add_plano_conta"):
                     if not nc.strip(): st.error("Digite o nome.")
                     elif any(c["nome_conta"].lower() == nc.lower() for c in st.session_state.plano_contas): st.error("Já existe!")
                     else: st.session_state.plano_contas.append({"nome_conta": nc, "categoria_dre": TIPO_MAPEAMENTO[ts], "exige_faturamento": ef}); save_db(); show_toast("Cadastrado!"); time.sleep(1); st.rerun()
@@ -1555,7 +1648,7 @@ elif st.session_state.pagina_atual == "CADASTRO":
                         nef = st.checkbox("Controlar Faturado?", value=da.get("exige_faturamento", False), key="chk_edit_fat") if TIPO_MAPEAMENTO[ng] in ["receita", "outras_receitas"] else False
                     with c3:
                         st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-                        if st.button("💾 Salvar", type="primary", use_container_width=True, key="btn_salvar_plano_conta_unico"):
+                        if st.button("💾 Salvar", type="primary", width="stretch", key="btn_salvar_plano_conta_unico"):
                             if not nn.strip(): st.error("Vazio.")
                             elif nn != ca and any(c["nome_conta"].lower() == nn.lower() for c in st.session_state.plano_contas): st.error("Já existe.")
                             else:
@@ -1569,7 +1662,7 @@ elif st.session_state.pagina_atual == "CADASTRO":
                                 save_db(); show_toast("Salvo!"); time.sleep(1); st.rerun()
                     with c4:
                         st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-                        if st.button("🗑️ Excluir", type="secondary", use_container_width=True, key="btn_excluir_plano_conta_unico"):
+                        if st.button("🗑️ Excluir", type="secondary", width="stretch", key="btn_excluir_plano_conta_unico"):
                             st.session_state.plano_contas = [c for c in st.session_state.plano_contas if c["nome_conta"] != ca]
                             st.session_state.orcamentos = [o for o in st.session_state.orcamentos if o["conta"] != ca]
                             st.session_state.lancamentos_reais = [l for l in st.session_state.lancamentos_reais if l["conta"] != ca]
@@ -1591,24 +1684,31 @@ elif st.session_state.pagina_atual == "CADASTRO":
                     st.markdown("<div style='margin-top: 15px; font-weight: 600;'>2. Selecione as Contas para Duplicar</div>", unsafe_allow_html=True)
                     df_pm = pd.DataFrame(plano_modelo)
                     df_pm.insert(0, "Duplicar?", True)
+                    if "exige_faturamento" not in df_pm.columns:
+                        df_pm["exige_faturamento"] = False
                     df_pm["Categoria DRE"] = df_pm["categoria_dre"].map({v: k for k, v in TIPO_MAPEAMENTO.items()})
                     df_pm_view = df_pm[["Duplicar?", "Categoria DRE", "nome_conta", "exige_faturamento"]].rename(columns={"nome_conta": "Subcategoria", "exige_faturamento": "Exige Faturamento?"})
-                    ed_pm = st.data_editor(df_pm_view, hide_index=True, use_container_width=True, disabled=["Categoria DRE", "Subcategoria", "Exige Faturamento?"], column_config={"Duplicar?": st.column_config.CheckboxColumn("Duplicar?", width="small")})
+                    ed_pm = st.data_editor(df_pm_view, hide_index=True, width="stretch", disabled=["Categoria DRE", "Subcategoria", "Exige Faturamento?"], column_config={"Duplicar?": st.column_config.CheckboxColumn("Duplicar?", width="small")})
                     
                     with c_dest:
                         emp_destinos = st.multiselect("3. Empresas de Destino", [k for k in emp_op.keys() if k != emp_modelo], format_func=lambda x: emp_op[x])
                         st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-                        if st.button("🔄 Duplicar Plano", type="primary", use_container_width=True, disabled=not emp_destinos):
+                        if st.button("🔄 Duplicar Plano", type="primary", width="stretch", disabled=not emp_destinos):
                             contas_selecionadas = ed_pm[ed_pm["Duplicar?"] == True]["Subcategoria"].tolist()
-                            contas_originais_filtradas = [c for c in plano_modelo if c["nome_conta"] in contas_selecionadas]
+                            contas_originais_filtradas = [c for c in plano_modelo if c.get("nome_conta") in contas_selecionadas]
                             
                             for dest in emp_destinos:
                                 plano_dest = st.session_state.db["empresas"][dest]["dados"].setdefault("plano_contas", [])
-                                nomes_dest = [c["nome_conta"].lower() for c in plano_dest]
+                                nomes_dest = [str(c.get("nome_conta", "")).lower() for c in plano_dest if isinstance(c, dict)]
                                 
                                 for c_nova in contas_originais_filtradas:
-                                    if c_nova["nome_conta"].lower() not in nomes_dest:
-                                        plano_dest.append(c_nova.copy())
+                                    nome_novo = str(c_nova.get("nome_conta", "")).lower()
+                                    if nome_novo and nome_novo not in nomes_dest:
+                                        plano_dest.append({
+                                            "nome_conta": str(c_nova.get("nome_conta", "")),
+                                            "categoria_dre": str(c_nova.get("categoria_dre", "")),
+                                            "exige_faturamento": bool(c_nova.get("exige_faturamento", False)),
+                                        })
                             
                             save_db(); show_toast("Plano duplicado com sucesso!"); time.sleep(1.5); st.rerun()
 
@@ -1618,23 +1718,142 @@ elif st.session_state.pagina_atual == "CADASTRO":
                 cdg = [c["nome_conta"] for c in st.session_state.plano_contas if c["categoria_dre"] == cg]
                 if cdg:
                     with st.expander(f"{'📈' if cg in ['receita', 'outras_receitas'] else '📉' if cg in ['deducao', 'custo_variavel', 'despesa_operacional', 'outras_despesas'] else '💼'} {ng_t} ({len(cdg)})"):
-                        st.dataframe(pd.DataFrame({"Conta": cdg}), use_container_width=True, hide_index=True)
+                        st.dataframe(pd.DataFrame({"Conta": cdg}), width="stretch", hide_index=True)
 
     with tb:
         st.markdown("<div class='saas-section-title' style='margin-top: 15px;'>💰 Caixa Inicial</div>", unsafe_allow_html=True)
         c1, _ = st.columns([3, 7])
         with c1:
-            if "input_saldo_ini" not in st.session_state: st.session_state["input_saldo_ini"] = formatar_moeda(st.session_state.saldo_inicial)
+            if "input_saldo_ini" not in st.session_state:
+                st.session_state["input_saldo_ini"] = formatar_moeda(st.session_state.saldo_inicial)
             st.text_input("Saldo", key="input_saldo_ini", on_change=aplicar_mascara_moeda, args=("input_saldo_ini",))
-            if st.button("💾 Salvar Saldo", type="primary", use_container_width=True, key="btn_salvar_saldo_inicial"): st.session_state.saldo_inicial = parse_currency(st.session_state["input_saldo_ini"]); save_db(); show_toast("Salvo!"); time.sleep(1); st.rerun()
+            if st.button("💾 Salvar Saldo", type="primary", width="stretch", key="btn_salvar_saldo_inicial"):
+                st.session_state.saldo_inicial = parse_currency(st.session_state["input_saldo_ini"])
+                save_db()
+                show_toast("Saldo atualizado!")
+                st.rerun()
 
         st.markdown("<hr style='border-color: #E2E8F0; margin: 25px 0;'><div class='saas-section-title'>Novo Banco</div>", unsafe_allow_html=True)
         rb = st.session_state.get("reset_banco", 0)
-        c1, c2, c3 = st.columns([3, 2, 2]); nb = c1.text_input("Banco", key=f"bn_{rb}"); gr = c2.text_input("Gerente", key=f"bg_{rb}"); wp = c3.text_input("WhatsApp", key=f"bw_{rb}", on_change=aplicar_mascara_telefone, args=(f"bw_{rb}",))
-        c4, c5, c6 = st.columns([2, 2, 3]); ag = c4.text_input("Agência", key=f"ba_{rb}"); cc = c5.text_input("Conta", key=f"bc_{rb}")
+        c1, c2, c3 = st.columns([3, 2, 2])
+        nb = c1.text_input("Banco", key=f"bn_{rb}")
+        gr = c2.text_input("Gerente", key=f"bg_{rb}")
+        wp = c3.text_input("WhatsApp", key=f"bw_{rb}", on_change=aplicar_mascara_telefone, args=(f"bw_{rb}",))
+        c4, c5, c6 = st.columns([2, 2, 3])
+        ag = c4.text_input("Agência", key=f"ba_{rb}")
+        cc = c5.text_input("Conta", key=f"bc_{rb}")
         with c6:
             st.markdown("<div style='margin-top: 26px;'></div>", unsafe_allow_html=True)
-            if st.button("➕ Cadastrar Banco", type="primary", use_container_width=True, key="btn_cadastrar_banco"):
-                if not nb.strip(): st.error("Digite o nome.")
-                elif any(b["nome"].lower() == nb.lower() for b in st.session_state.bancos): st.error("Já existe.")
-                else: st.session_state
+            if st.button("➕ Cadastrar Banco", type="primary", width="stretch", key="btn_cadastrar_banco"):
+                nome_novo_banco = nb.strip()
+                if not nome_novo_banco:
+                    st.error("Digite o nome.")
+                elif any(str(b.get("nome", "")).lower() == nome_novo_banco.lower() for b in st.session_state.bancos):
+                    st.error("Já existe.")
+                else:
+                    st.session_state.bancos.append({
+                        "id": str(uuid.uuid4()),
+                        "nome": nome_novo_banco,
+                        "gerente": gr.strip(),
+                        "whatsapp": wp.strip(),
+                        "agencia": ag.strip(),
+                        "conta": cc.strip(),
+                        "saldo": 0.0,
+                        "ultima_atualizacao": date.today().strftime("%d/%m/%Y"),
+                    })
+                    save_db()
+                    st.session_state.reset_banco = rb + 1
+                    show_toast("Banco cadastrado!")
+                    st.rerun()
+
+        if st.session_state.bancos:
+            st.markdown("<div class='saas-section-title' style='margin-top: 20px;'>Bancos Cadastrados</div>", unsafe_allow_html=True)
+            bancos_df = pd.DataFrame(st.session_state.bancos)
+            bancos_df.insert(0, "Excluir", False)
+            view_cols = [c for c in ["Excluir", "nome", "gerente", "whatsapp", "agencia", "conta", "saldo"] if c in bancos_df.columns]
+            bancos_view = bancos_df[view_cols].rename(columns={
+                "nome": "Banco",
+                "gerente": "Gerente",
+                "whatsapp": "WhatsApp",
+                "agencia": "Agência",
+                "conta": "Conta",
+                "saldo": "Saldo"
+            })
+            bancos_edit = st.data_editor(
+                bancos_view,
+                hide_index=True,
+                width="stretch",
+                disabled=["Banco", "Gerente", "WhatsApp", "Agência", "Conta", "Saldo"],
+                column_config={
+                    "Excluir": st.column_config.CheckboxColumn("Excluir", width="small"),
+                    "Saldo": st.column_config.NumberColumn("Saldo", format="R$ %.2f"),
+                },
+            )
+            bancos_sel = bancos_edit[bancos_edit["Excluir"] == True]
+            if not bancos_sel.empty and st.button("🗑️ Excluir bancos selecionados", type="secondary", key="btn_del_bancos"):
+                nomes_excluir = set(bancos_sel["Banco"].tolist())
+                st.session_state.bancos = [b for b in st.session_state.bancos if b.get("nome") not in nomes_excluir]
+                save_db()
+                show_toast("Banco(s) excluído(s)!")
+                st.rerun()
+
+    with tfp:
+        st.markdown("<div class='saas-section-title' style='margin-top: 15px;'>💳 Formas de Pagamento</div>", unsafe_allow_html=True)
+        nova_fp = st.text_input("Nova forma de pagamento", key="nova_fp")
+        if st.button("➕ Adicionar Forma", type="primary", key="btn_add_forma_pag"):
+            nome_fp = nova_fp.strip()
+            if not nome_fp:
+                st.error("Digite o nome.")
+            elif any(str(x).lower() == nome_fp.lower() for x in st.session_state.formas_pagamento):
+                st.error("Forma já cadastrada.")
+            else:
+                st.session_state.formas_pagamento.append(nome_fp)
+                save_db()
+                show_toast("Forma de pagamento adicionada!")
+                st.rerun()
+
+        if st.session_state.formas_pagamento:
+            fp_df = pd.DataFrame({"Remover": [False] * len(st.session_state.formas_pagamento), "Forma": st.session_state.formas_pagamento})
+            fp_ed = st.data_editor(fp_df, hide_index=True, width="stretch", disabled=["Forma"], column_config={"Remover": st.column_config.CheckboxColumn("Remover", width="small")})
+            fp_sel = fp_ed[fp_ed["Remover"] == True]
+            if not fp_sel.empty and st.button("🗑️ Remover selecionadas", key="btn_remove_formas"):
+                remover = set(fp_sel["Forma"].tolist())
+                st.session_state.formas_pagamento = [x for x in st.session_state.formas_pagamento if x not in remover]
+                save_db()
+                show_toast("Formas removidas!")
+                st.rerun()
+        else:
+            st.info("Nenhuma forma cadastrada.")
+
+    with tv:
+        st.markdown("<div class='saas-section-title' style='margin-top: 15px;'>✨ Design & Cenários</div>", unsafe_allow_html=True)
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            cor_primaria = st.color_picker("Cor primária", value=st.session_state.color_primary)
+            if cor_primaria != st.session_state.color_primary:
+                st.session_state.color_primary = cor_primaria
+        with c2:
+            cor_bg = st.color_picker("Cor de fundo", value=st.session_state.color_bg)
+            if cor_bg != st.session_state.color_bg:
+                st.session_state.color_bg = cor_bg
+        with c3:
+            cor_texto = st.color_picker("Cor do texto", value=st.session_state.color_text)
+            if cor_texto != st.session_state.color_text:
+                st.session_state.color_text = cor_texto
+
+        c4, c5 = st.columns(2)
+        with c4:
+            c2_pct = st.number_input("Cenário 2 (+%)", value=float(st.session_state.cenarios_cfg.get("c2", 30.0)), step=1.0)
+        with c5:
+            c3_pct = st.number_input("Cenário 3 (+%)", value=float(st.session_state.cenarios_cfg.get("c3", 70.0)), step=1.0)
+
+        if st.button("💾 Salvar Design e Cenários", type="primary", key="btn_salvar_design"):
+            st.session_state.cenarios_cfg = {"c2": float(c2_pct), "c3": float(c3_pct)}
+            if st.session_state.empresa_selecionada != "TODAS" and st.session_state.empresa_selecionada in st.session_state.db["empresas"]:
+                st.session_state.db["empresas"][st.session_state.empresa_selecionada]["cenarios"] = st.session_state.cenarios_cfg
+            save_db()
+            show_toast("Design e cenários salvos!")
+            st.rerun()
+
+# Fecha container notranslate aberto no cabeçalho principal.
+st.markdown("</div>", unsafe_allow_html=True)
